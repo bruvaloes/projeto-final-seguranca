@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from collections import deque
 
 import cv2
 import torch
@@ -75,11 +76,14 @@ def classificar_frame(model, frame, bgr=True, top_k=3):
     return classificar(model, frame_para_imagem(frame, bgr), top_k)
 
 
-def classificar_video(model, caminho, a_cada_n_frames=5, top_k=3):
+def classificar_video(model, caminho, a_cada_n_frames=5, suavizacao=5, top_k=3):
     cap = cv2.VideoCapture(caminho)
     if not cap.isOpened():
         raise ValueError(f"nao foi possivel abrir o video {caminho}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    # media das probabilidades dos ultimos K frames analisados, para a
+    # predicao nao ficar "piscando" entre classes de um frame para o outro
+    ultimas = deque(maxlen=max(1, suavizacao))
 
     n = 0
     try:
@@ -88,10 +92,13 @@ def classificar_video(model, caminho, a_cada_n_frames=5, top_k=3):
             if not ok:
                 break
             if n % a_cada_n_frames == 0:
+                x = preparar_imagem(frame_para_imagem(frame))
+                ultimas.append(probabilidades(model, x))
+                media = torch.stack(list(ultimas)).mean(0)
                 yield {
                     "frame": n,
                     "tempo_s": n / fps,
-                    "resultado": classificar_frame(model, frame, top_k=top_k),
+                    "resultado": _top_k(media, top_k),
                 }
             n += 1
     finally:
@@ -109,12 +116,13 @@ def main():
     parser.add_argument("--modelo", default="sinalnet.pt")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--a-cada", type=int, default=5, help="no video, analisa um frame a cada N")
+    parser.add_argument("--suavizacao", type=int, default=5, help="no video, media dos ultimos K frames (1 desliga)")
     args = parser.parse_args()
 
     model = carregar_modelo(args.modelo)
 
     if os.path.splitext(args.arquivo)[1].lower() in EXTENSOES_VIDEO:
-        for r in classificar_video(model, args.arquivo, args.a_cada, top_k=1):
+        for r in classificar_video(model, args.arquivo, args.a_cada, args.suavizacao, top_k=1):
             top = r["resultado"][0]
             print(f"{r['tempo_s']:6.2f}s  frame {r['frame']:5d}  {top['confianca'] * 100:6.2f}%  {top['nome']}")
     else:
