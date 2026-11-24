@@ -1,3 +1,4 @@
+import argparse
 import time
 
 import torch
@@ -59,15 +60,22 @@ def avaliar(model, loader, device):
 
 
 def main():
-    epocas, batch_size, lr = 10, 128, 1e-3
-    saida = "sinalnet.pt"
+    parser = argparse.ArgumentParser(description="treina a SinalNet no GTSRB")
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--data", default="data", help="pasta do dataset")
+    parser.add_argument("--out", default="sinalnet.pt", help="onde salvar o checkpoint")
+    parser.add_argument("--workers", type=int, default=2)
+    args = parser.parse_args()
+    epocas, saida = args.epochs, args.out
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"usando {device}")
 
-    loader_treino, loader_teste = criar_loaders(batch_size=batch_size)
+    loader_treino, loader_teste = criar_loaders(args.data, args.batch_size, args.workers)
     model = SinalNet().to(device)
     criterio = nn.CrossEntropyLoss()
-    otimizador = torch.optim.Adam(model.parameters(), lr=lr)
+    otimizador = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(otimizador, T_max=epocas)
 
     melhor_acc = 0.0
