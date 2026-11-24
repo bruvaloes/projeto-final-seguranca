@@ -10,9 +10,16 @@ from model import IMG_SIZE, SinalNet
 
 
 def criar_loaders(data_dir="data", batch_size=128, workers=2):
-    # sem Normalize aqui: o modelo recebe pixels em [0, 1]
+    # Augmentation pensado para fotos e frames de video reais: placa torta,
+    # fora do centro, vista de lado, com luz diferente ou borrada.
+    # Sem flip horizontal: espelhar "vire a esquerda" vira "vire a direita".
+    # Sem Normalize aqui: o modelo recebe pixels em [0, 1].
     tf_treino = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.3),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
+        transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 1.5))], p=0.2),
         transforms.ToTensor(),
     ])
     tf_teste = transforms.Compose([
