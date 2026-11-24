@@ -1,8 +1,11 @@
+import time
+
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from model import IMG_SIZE
+from model import IMG_SIZE, SinalNet
 
 
 def criar_loaders(data_dir="data", batch_size=128, workers=2):
@@ -27,8 +30,40 @@ def criar_loaders(data_dir="data", batch_size=128, workers=2):
     return loader_treino, loader_teste
 
 
+def treinar_epoca(model, loader, criterio, otimizador, device):
+    model.train()
+    perda_total, acertos, total = 0.0, 0, 0
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+        otimizador.zero_grad()
+        logits = model(x)
+        perda = criterio(logits, y)
+        perda.backward()
+        otimizador.step()
+
+        perda_total += perda.item() * x.size(0)
+        acertos += (logits.argmax(1) == y).sum().item()
+        total += x.size(0)
+    return perda_total / total, acertos / total
+
+
+def main():
+    epocas, batch_size, lr = 10, 128, 1e-3
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"usando {device}")
+
+    loader_treino, loader_teste = criar_loaders(batch_size=batch_size)
+    model = SinalNet().to(device)
+    criterio = nn.CrossEntropyLoss()
+    otimizador = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(otimizador, T_max=epocas)
+
+    for epoca in range(1, epocas + 1):
+        inicio = time.time()
+        perda, acc = treinar_epoca(model, loader_treino, criterio, otimizador, device)
+        scheduler.step()
+        print(f"epoca {epoca}/{epocas} | perda {perda:.4f} | acc treino {acc:.4f} | {time.time() - inicio:.0f}s")
+
+
 if __name__ == "__main__":
-    loader_treino, loader_teste = criar_loaders()
-    print(f"treino: {len(loader_treino.dataset)} imagens | teste: {len(loader_teste.dataset)} imagens")
-    x, y = next(iter(loader_treino))
-    print(x.shape, x.min().item(), x.max().item(), y[:10].tolist())
+    main()
