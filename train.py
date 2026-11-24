@@ -47,8 +47,20 @@ def treinar_epoca(model, loader, criterio, otimizador, device):
     return perda_total / total, acertos / total
 
 
+@torch.no_grad()
+def avaliar(model, loader, device):
+    model.eval()
+    acertos, total = 0, 0
+    for x, y in loader:
+        x, y = x.to(device), y.to(device)
+        acertos += (model(x).argmax(1) == y).sum().item()
+        total += x.size(0)
+    return acertos / total
+
+
 def main():
     epocas, batch_size, lr = 10, 128, 1e-3
+    saida = "sinalnet.pt"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"usando {device}")
 
@@ -58,11 +70,21 @@ def main():
     otimizador = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(otimizador, T_max=epocas)
 
+    melhor_acc = 0.0
     for epoca in range(1, epocas + 1):
         inicio = time.time()
         perda, acc = treinar_epoca(model, loader_treino, criterio, otimizador, device)
         scheduler.step()
-        print(f"epoca {epoca}/{epocas} | perda {perda:.4f} | acc treino {acc:.4f} | {time.time() - inicio:.0f}s")
+        acc_teste = avaliar(model, loader_teste, device)
+        print(f"epoca {epoca}/{epocas} | perda {perda:.4f} | acc treino {acc:.4f} "
+              f"| acc teste {acc_teste:.4f} | {time.time() - inicio:.0f}s")
+
+        if acc_teste > melhor_acc:
+            melhor_acc = acc_teste
+            torch.save({"model": model.state_dict(), "acc": acc_teste, "img_size": IMG_SIZE}, saida)
+            print(f"  -> melhor modelo salvo em {saida}")
+
+    print(f"melhor acuracia no teste: {melhor_acc:.4f}")
 
 
 if __name__ == "__main__":
