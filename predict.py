@@ -105,6 +105,31 @@ def classificar_video(model, caminho, a_cada_n_frames=5, suavizacao=5, top_k=3):
         cap.release()
 
 
+def rodar_webcam(model, camera=0, suavizacao=5):
+    # so para testes locais; a interface oficial e a da Bruna
+    cap = cv2.VideoCapture(camera)
+    if not cap.isOpened():
+        raise ValueError(f"nao foi possivel abrir a camera {camera}")
+    ultimas = deque(maxlen=max(1, suavizacao))
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            ultimas.append(probabilidades(model, preparar_imagem(frame_para_imagem(frame))))
+            top = _top_k(torch.stack(list(ultimas)).mean(0), 1)[0]
+            # cv2.putText nao desenha acentos, entao mostramos o numero da classe junto
+            texto = f"{top['classe']}: {top['nome']} ({top['confianca'] * 100:.0f}%)"
+            cv2.putText(frame, texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
+            cv2.putText(frame, texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.imshow("SinalNet - q para sair", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+
+
 def imprimir_resultado(resultado):
     for r in resultado:
         print(f"  {r['confianca'] * 100:6.2f}%  {r['nome']} (classe {r['classe']})")
@@ -112,16 +137,22 @@ def imprimir_resultado(resultado):
 
 def main():
     parser = argparse.ArgumentParser(description="classifica placas de transito com a SinalNet")
-    parser.add_argument("arquivo", help="imagem ou video da placa")
+    parser.add_argument("arquivo", nargs="?", help="imagem ou video da placa")
     parser.add_argument("--modelo", default="sinalnet.pt")
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--a-cada", type=int, default=5, help="no video, analisa um frame a cada N")
     parser.add_argument("--suavizacao", type=int, default=5, help="no video, media dos ultimos K frames (1 desliga)")
+    parser.add_argument("--webcam", action="store_true", help="classifica ao vivo pela camera")
+    parser.add_argument("--camera", type=int, default=0)
     args = parser.parse_args()
+    if not args.webcam and not args.arquivo:
+        parser.error("informe um arquivo ou use --webcam")
 
     model = carregar_modelo(args.modelo)
 
-    if os.path.splitext(args.arquivo)[1].lower() in EXTENSOES_VIDEO:
+    if args.webcam:
+        rodar_webcam(model, args.camera, args.suavizacao)
+    elif os.path.splitext(args.arquivo)[1].lower() in EXTENSOES_VIDEO:
         for r in classificar_video(model, args.arquivo, args.a_cada, args.suavizacao, top_k=1):
             top = r["resultado"][0]
             print(f"{r['tempo_s']:6.2f}s  frame {r['frame']:5d}  {top['confianca'] * 100:6.2f}%  {top['nome']}")
