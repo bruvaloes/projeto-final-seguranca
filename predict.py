@@ -1,6 +1,8 @@
 import argparse
+import os
 import sys
 
+import cv2
 import torch
 import torch.nn.functional as F
 from PIL import Image
@@ -9,6 +11,7 @@ from torchvision import transforms
 from model import CLASSES, IMG_SIZE, SinalNet
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+EXTENSOES_VIDEO = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
 _transform = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
@@ -60,6 +63,41 @@ def tensor_para_imagem(x, tamanho=256):
     return imagem.resize((tamanho, tamanho), Image.NEAREST)
 
 
+# O modelo e um classificador, nao um detector: funciona quando a placa
+# ocupa boa parte do quadro (camera apontada para a placa).
+def frame_para_imagem(frame, bgr=True):
+    if bgr:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(frame)
+
+
+def classificar_frame(model, frame, bgr=True, top_k=3):
+    return classificar(model, frame_para_imagem(frame, bgr), top_k)
+
+
+def classificar_video(model, caminho, a_cada_n_frames=5, top_k=3):
+    cap = cv2.VideoCapture(caminho)
+    if not cap.isOpened():
+        raise ValueError(f"nao foi possivel abrir o video {caminho}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+    n = 0
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            if n % a_cada_n_frames == 0:
+                yield {
+                    "frame": n,
+                    "tempo_s": n / fps,
+                    "resultado": classificar_frame(model, frame, top_k=top_k),
+                }
+            n += 1
+    finally:
+        cap.release()
+
+
 def imprimir_resultado(resultado):
     for r in resultado:
         print(f"  {r['confianca'] * 100:6.2f}%  {r['nome']} (classe {r['classe']})")
@@ -67,14 +105,21 @@ def imprimir_resultado(resultado):
 
 def main():
     parser = argparse.ArgumentParser(description="classifica placas de transito com a SinalNet")
-    parser.add_argument("arquivo", help="imagem da placa")
+    parser.add_argument("arquivo", help="imagem ou video da placa")
     parser.add_argument("--modelo", default="sinalnet.pt")
     parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--a-cada", type=int, default=5, help="no video, analisa um frame a cada N")
     args = parser.parse_args()
 
     model = carregar_modelo(args.modelo)
-    print(args.arquivo)
-    imprimir_resultado(classificar(model, args.arquivo, args.top_k))
+
+    if os.path.splitext(args.arquivo)[1].lower() in EXTENSOES_VIDEO:
+        for r in classificar_video(model, args.arquivo, args.a_cada, top_k=1):
+            top = r["resultado"][0]
+            print(f"{r['tempo_s']:6.2f}s  frame {r['frame']:5d}  {top['confianca'] * 100:6.2f}%  {top['nome']}")
+    else:
+        print(args.arquivo)
+        imprimir_resultado(classificar(model, args.arquivo, args.top_k))
 
 
 if __name__ == "__main__":
