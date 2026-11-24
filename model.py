@@ -50,3 +50,19 @@ CLASSES = [
     "Fim da proibição de ultrapassar para caminhões",
 ]
 NUM_CLASSES = len(CLASSES)
+
+MEAN = (0.3403, 0.3121, 0.3214)
+STD = (0.2724, 0.2608, 0.2669)
+
+
+# A normalizacao fica dentro do modelo para ele receber pixels em [0, 1].
+# Assim o ataque (etapa final) perturba a imagem direto no espaco de pixels
+# e so precisa fazer clamp(0, 1), sem desfazer a normalizacao.
+class Normalize(nn.Module):
+    def __init__(self, mean=MEAN, std=STD):
+        super().__init__()
+        self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
+
+    def forward(self, x):
+        return (x - self.mean) / self.std
