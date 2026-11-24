@@ -1,4 +1,5 @@
 import argparse
+import sys
 import time
 
 import torch
@@ -6,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from model import IMG_SIZE, SinalNet
+from model import CLASSES, IMG_SIZE, NUM_CLASSES, SinalNet
 
 
 def criar_loaders(data_dir="data", batch_size=128, workers=2):
@@ -66,6 +67,31 @@ def avaliar(model, loader, device):
     return acertos / total
 
 
+@torch.no_grad()
+def matriz_confusao(model, loader, device):
+    model.eval()
+    matriz = torch.zeros(NUM_CLASSES, NUM_CLASSES, dtype=torch.long)
+    for x, y in loader:
+        pred = model(x.to(device)).argmax(1).cpu()
+        for real, p in zip(y, pred):
+            matriz[real, p] += 1
+    return matriz
+
+
+def relatorio_por_classe(matriz):
+    acertos = matriz.diag()
+    totais = matriz.sum(1)
+    print("\nacuracia por classe (da pior para a melhor):")
+    ordem = sorted(range(NUM_CLASSES), key=lambda c: acertos[c] / totais[c])
+    for c in ordem:
+        # classe que mais "rouba" exemplos desta
+        erros = matriz[c].clone()
+        erros[c] = 0
+        confusa = erros.argmax().item()
+        extra = f" (confunde com {CLASSES[confusa]}: {erros[confusa]})" if erros.sum() > 0 else ""
+        print(f"  {c:2d} {CLASSES[c]:<48} {acertos[c] / totais[c]:.4f}  [{acertos[c]}/{totais[c]}]{extra}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="treina a SinalNet no GTSRB")
     parser.add_argument("--epochs", type=int, default=10)
@@ -101,6 +127,14 @@ def main():
 
     print(f"melhor acuracia no teste: {melhor_acc:.4f}")
 
+    # relatorio com o melhor checkpoint, nao com o da ultima epoca
+    checkpoint = torch.load(saida, map_location=device, weights_only=True)
+    model.load_state_dict(checkpoint["model"])
+    relatorio_por_classe(matriz_confusao(model, loader_teste, device))
+
 
 if __name__ == "__main__":
+    # o terminal do Windows nao lida bem com acentos nos nomes das classes
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     main()
