@@ -1,3 +1,6 @@
+import argparse
+import sys
+
 import torch
 import torch.nn.functional as F
 from PIL import Image
@@ -55,3 +58,27 @@ def tensor_para_imagem(x, tamanho=256):
     x = x.detach().cpu().squeeze(0).clamp(0, 1)
     imagem = transforms.functional.to_pil_image(x)
     return imagem.resize((tamanho, tamanho), Image.NEAREST)
+
+
+def imprimir_resultado(resultado):
+    for r in resultado:
+        print(f"  {r['confianca'] * 100:6.2f}%  {r['nome']} (classe {r['classe']})")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="classifica placas de transito com a SinalNet")
+    parser.add_argument("arquivo", help="imagem da placa")
+    parser.add_argument("--modelo", default="sinalnet.pt")
+    parser.add_argument("--top-k", type=int, default=3)
+    args = parser.parse_args()
+
+    model = carregar_modelo(args.modelo)
+    print(args.arquivo)
+    imprimir_resultado(classificar(model, args.arquivo, args.top_k))
+
+
+if __name__ == "__main__":
+    # o terminal do Windows nao lida bem com acentos nos nomes das classes
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    main()
