@@ -1,5 +1,4 @@
 import argparse
-import random
 import sys
 import time
 
@@ -9,12 +8,8 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from attack import pgd
+from augmentacao import ruido_gaussiano
 from model import CLASSES, IMG_SIZE, NUM_CLASSES, SinalNet
-
-
-def _ruido(x, intensidade_max=0.08):
-    # ruido de sensor/compressao, mais forte em fotos de baixa qualidade
-    return (x + torch.randn_like(x) * random.uniform(0, intensidade_max)).clamp(0, 1)
 
 
 def criar_loaders(data_dir="data", batch_size=128, workers=2):
@@ -30,7 +25,7 @@ def criar_loaders(data_dir="data", batch_size=128, workers=2):
         transforms.ColorJitter(brightness=0.5, contrast=0.4, saturation=0.3),
         transforms.RandomApply([transforms.GaussianBlur(3, sigma=(0.1, 2.0))], p=0.3),
         transforms.ToTensor(),
-        transforms.Lambda(_ruido),
+        transforms.Lambda(ruido_gaussiano),
         transforms.RandomErasing(p=0.3, scale=(0.02, 0.2), value="random"),
     ])
     tf_teste = transforms.Compose([
