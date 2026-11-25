@@ -1,0 +1,16 @@
+# dataset baixado pelo torchvision
+data/
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# imagens e videos de teste
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.ppm
