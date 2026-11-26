@@ -16,3 +16,29 @@ Este documento trata a SinalNet como o alvo de uma análise de risco, não como 
 ### Por que isso é diferente de um bug comum
 
 Um bug de software tradicional (buffer overflow, injeção de SQL) tem uma correção que o elimina. Robustez adversarial não funciona assim: não existe "patch" que torne a rede imune a qualquer perturbação dentro do orçamento do atacante — o máximo que se consegue é deslocar a fronteira de decisão para que perturbações do mesmo tamanho exijam mais esforço computacional do atacante. Por isso a métrica certa não é "o ataque funciona? sim/não", e sim "quanto custa (em eps, em consultas, em acesso) montar o ataque, e o que isso custa pro modelo robusto em troca".
+
+## Cenário de ameaça
+
+Pra discutir impacto de forma concreta, imaginamos a SinalNet como o estágio de reconhecimento de placas de um pipeline de ADAS (sistema avançado de assistência ao motorista) ou carro autônomo: câmera → pré-processamento → **classificador de placa** → módulo de decisão (frear, respeitar limite de velocidade, não ultrapassar). A classificação errada não fica isolada: ela se propaga para uma ação do veículo.
+
+Duas superfícies de ataque bem diferentes, com atacantes de capacidade bem diferente:
+
+### 1. Superfície digital — alguém no caminho da imagem
+
+**Atacante**: tem acesso ao pipeline de dados entre a câmera e o classificador (ex.: um componente de software comprometido, ou um ataque na própria câmera/driver). Pode alterar os pixels antes de chegarem ao modelo.
+
+**Capacidade**: se também tiver acesso aos pesos do modelo (white-box — o caso mais forte, e o que `attack.py` assume com FGSM/PGD), a perturbação necessária é pequena (eps ~0,03-0,08) e rápida de calcular. Isso é o cenário mais fácil de simular e o que já implementamos.
+
+**Realismo**: alto *se* o atacante já comprometeu algo no pipeline — mas nesse ponto ele já tem bastante acesso ao sistema, então a classificação de placa pode não ser o elo mais fácil de atacar. Esse ataque é mais relevante como estudo da robustez do modelo em si do que como vetor de intrusão isolado.
+
+### 2. Superfície física — alguém que só tem acesso à placa
+
+**Atacante**: não tem acesso a nenhum software do carro, só pode alterar o mundo físico — colar um adesivo na placa, por exemplo. Não precisa comprometer nada digital.
+
+**Capacidade**: mais restrita e mais interessante do ponto de vista de segurança, porque é um vetor de ataque real e barato (qualquer pessoa pode se aproximar de uma placa). Mas é tecnicamente mais difícil: a perturbação precisa sobreviver a variações de ângulo, distância, iluminação e à captura da câmera — uma perturbação de pixel calculada para uma única foto (como o FGSM/PGD padrão) geralmente não sobrevive a essas transformações. Isso é tratado na seção "Ataque físico" abaixo.
+
+**Realismo**: esse é o cenário citado na literatura de segurança de ML (ex.: adesivos em placas de Pare) como o mais preocupante na prática, justamente porque não exige nenhum acesso digital — só proximidade física com a placa.
+
+### Qual importa mais pro trabalho
+
+A superfície física é a que mais justifica chamar isso de "projeto de segurança": não depende de uma premissa forte (acesso aos pesos do modelo) para ser um risco real. A superfície digital é mais fácil de demonstrar e quantificar, e serve de base técnica (é o que os ataques FGSM/PGD já implementados exploram), mas seu impacto prático depende de um atacante que já tem outro ponto de entrada no sistema.
