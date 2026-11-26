@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 
 from model import NUM_CLASSES, SinalNet
-from predict import classificar_tensor, desconhecido, preparar_imagem
+from predict import DEVICE, classificar_tensor, desconhecido, preparar_imagem
 
 
 def test_preparar_imagem_aceita_pil_e_normaliza_para_0_1():
@@ -14,7 +14,7 @@ def test_preparar_imagem_aceita_pil_e_normaliza_para_0_1():
 
 
 def test_classificar_tensor_devolve_top_k_ordenado():
-    model = SinalNet()
+    model = SinalNet().to(DEVICE)
     x = torch.rand(1, 3, 48, 48)
     resultado = classificar_tensor(model, x, top_k=5)
     assert len(resultado) == 5

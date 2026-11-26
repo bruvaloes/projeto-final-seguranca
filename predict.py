@@ -9,9 +9,9 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from model import CLASSES, IMG_SIZE, SinalNet
+from model import CLASSES, IMG_SIZE, SinalNet, escolher_device
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = escolher_device()
 EXTENSOES_VIDEO = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
 # o modelo sempre responde uma das 43 classes, mesmo para uma imagem que nao
