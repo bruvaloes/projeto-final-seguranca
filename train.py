@@ -9,7 +9,7 @@ from torchvision import datasets, transforms
 
 from attack import pgd
 from augmentacao import ruido_gaussiano
-from model import CLASSES, IMG_SIZE, NUM_CLASSES, SinalNet
+from model import CLASSES, IMG_SIZE, NUM_CLASSES, SinalNet, escolher_device
 
 
 def criar_loaders(data_dir="data", batch_size=128, workers=2):
@@ -133,7 +133,7 @@ def main():
     parser.add_argument("--adv-passos", type=int, default=5)
     args = parser.parse_args()
     epocas, saida = args.epochs, args.out
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = escolher_device()
     print(f"usando {device}")
 
     adv = None
