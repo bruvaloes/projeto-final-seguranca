@@ -42,3 +42,16 @@ Duas superfícies de ataque bem diferentes, com atacantes de capacidade bem dife
 ### Qual importa mais pro trabalho
 
 A superfície física é a que mais justifica chamar isso de "projeto de segurança": não depende de uma premissa forte (acesso aos pesos do modelo) para ser um risco real. A superfície digital é mais fácil de demonstrar e quantificar, e serve de base técnica (é o que os ataques FGSM/PGD já implementados exploram), mas seu impacto prático depende de um atacante que já tem outro ponto de entrada no sistema.
+
+## Ataque físico (patch adversarial)
+
+`patch_attack.py` implementa a superfície física descrita acima: em vez de perturbar a imagem inteira (FGSM/PGD), otimiza um pequeno adesivo quadrado — um patch — colado num canto fixo da placa, que precisa continuar enganando o modelo mesmo sob variações de ângulo, distância e iluminação da foto.
+
+```bash
+python patch_attack.py placa.jpg                                   # nao-direcionado
+python patch_attack.py placa.jpg --classe 14 --tamanho 24 --passos 600  # forca "Pare"
+```
+
+A técnica é **Expectation over Transformation** (EoT, de Athalye et al., "Synthesizing Robust Adversarial Examples"): a cada passo do treino do patch, em vez de calcular o gradiente numa única versão da imagem, tiramos a média do gradiente sobre `--amostras-por-passo` versões com rotação, translação, escala e brilho aleatórios (`_compor` em `patch_attack.py`). Isso é o que diferencia esse ataque do FGSM/PGD: o patch não é otimizado pra uma foto específica, é otimizado pra sobreviver a uma distribuição de condições de captura — o requisito real de um adesivo físico.
+
+**Achado relevante pro trabalho**: o ataque não-direcionado (só forçar qualquer erro) converge rápido e com alta confiança mesmo com uma faixa de EoT pequena. O ataque **direcionado** (forçar uma classe específica, ex. fazer o modelo ver "Pare" em qualquer outra placa) precisa de um patch maior e mais passos para convergir de forma confiável — com `--tamanho 16` e EoT mais larga ele não converge bem; com `--tamanho 24` (um quarto da área da imagem) e 600 passos, chega a 98,6% de confiança na classe forçada. Ou seja: **é consideravelmente mais fácil um atacante causar um erro qualquer do que escolher exatamente qual erro causar** — uma assimetria de risco que vale citar na análise: mesmo um atacante sem controle fino ainda consegue negar o reconhecimento correto da placa.
