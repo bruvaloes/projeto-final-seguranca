@@ -50,12 +50,17 @@ def treinar_epoca(model, loader, criterio, otimizador, device, adv=None):
     for x, y in loader:
         x, y = x.to(device), y.to(device)
 
-        if adv is not None:
-            # gera os exemplos adversariais com BatchNorm em modo eval, para
-            # as iteracoes do PGD nao sujarem as estatisticas de rodagem
-            model.eval()
-            x = pgd(model, x, y, adv["eps"], adv["alpha"], adv["passos"])
-            model.train()
+        if adv is not None and adv["eps"] > 0:
+            # so uma fracao do batch fica adversarial (o resto continua limpo),
+            # para nao sacrificar tanta acuracia limpa em troca de robustez
+            k = int(x.size(0) * adv["proporcao"])
+            if k > 0:
+                # gera os exemplos adversariais com BatchNorm em modo eval, para
+                # as iteracoes do PGD nao sujarem as estatisticas de rodagem
+                model.eval()
+                x_adv = pgd(model, x[:k], y[:k], adv["eps"], adv["alpha"], adv["passos"])
+                model.train()
+                x = torch.cat([x_adv, x[k:]], dim=0)
 
         otimizador.zero_grad()
         logits = model(x)
@@ -131,6 +136,10 @@ def main():
     parser.add_argument("--adv-eps", type=float, default=0.03)
     parser.add_argument("--adv-alpha", type=float, default=0.01)
     parser.add_argument("--adv-passos", type=int, default=5)
+    parser.add_argument("--adv-proporcao", type=float, default=0.7,
+                         help="fracao de cada batch que vira adversarial, o resto fica limpo")
+    parser.add_argument("--adv-warmup", type=int, default=5,
+                         help="epocas de rampa linear do eps do ataque, de 0 ate --adv-eps")
     args = parser.parse_args()
     epocas, saida = args.epochs, args.out
     device = escolher_device()
@@ -138,8 +147,12 @@ def main():
 
     adv = None
     if args.adv_treino:
-        adv = {"eps": args.adv_eps, "alpha": args.adv_alpha, "passos": args.adv_passos}
-        print(f"adversarial training ativado: eps={adv['eps']} alpha={adv['alpha']} passos={adv['passos']}")
+        adv = {
+            "eps": args.adv_eps, "alpha": args.adv_alpha, "passos": args.adv_passos,
+            "proporcao": args.adv_proporcao, "warmup": args.adv_warmup,
+        }
+        print(f"adversarial training ativado: eps={adv['eps']} alpha={adv['alpha']} "
+              f"passos={adv['passos']} proporcao={adv['proporcao']} warmup={adv['warmup']}")
 
     loader_treino, loader_teste = criar_loaders(args.data, args.batch_size, args.workers)
     model = SinalNet().to(device)
@@ -150,7 +163,12 @@ def main():
     melhor_acc = 0.0
     for epoca in range(1, epocas + 1):
         inicio = time.time()
-        perda, acc = treinar_epoca(model, loader_treino, criterio, otimizador, device, adv)
+        if adv is not None:
+            progresso = min(1.0, epoca / max(1, adv["warmup"]))
+            adv_epoca = {**adv, "eps": adv["eps"] * progresso}
+        else:
+            adv_epoca = None
+        perda, acc = treinar_epoca(model, loader_treino, criterio, otimizador, device, adv_epoca)
         scheduler.step()
         acc_teste = avaliar(model, loader_teste, device)
         print(f"epoca {epoca}/{epocas} | perda {perda:.4f} | acc treino {acc:.4f} "
