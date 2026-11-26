@@ -66,3 +66,27 @@ python blackbox_attack.py placa.jpg --classe 14 --passos 6912 --step 0.3  # forc
 ```
 
 **Achado relevante pro trabalho**: o ataque funciona (testado: não-direcionado chega a 95%+ de confiança numa classe errada, direcionado chega a 99,96% forçando "Pare"), mas custa muito mais **consultas ao modelo** que teria custado chamadas de gradiente num ataque white-box — no teste, o não-direcionado usou ~4.700 consultas e o direcionado precisou escanear a imagem inteira, ~11.400 consultas, pra convergir bem. Isso é o ponto central de um ataque black-box: ele é viável, mas tem um **custo mensurável e observável** (número de chamadas ao modelo) que não existe no ataque digital white-box nem no ataque físico. Esse número de consultas é justamente o que a mitigação "restringir o número de consultas ao modelo" (ver [mapeamento MITRE ATLAS](#mapeamento-mitre-atlas)) tenta limitar — um sistema que detecta e bloqueia um cliente fazendo milhares de consultas na mesma imagem inviabiliza esse ataque específico, mesmo sem tocar no modelo.
+
+## Mapeamento MITRE ATLAS
+
+O [MITRE ATLAS](https://atlas.mitre.org/) é uma base de conhecimento de táticas e técnicas de ataque contra sistemas de IA/ML, no mesmo espírito do ATT&CK pra segurança tradicional. Mapear os ataques deste projeto nessa taxonomia ajuda a situar o trabalho como segurança (linguagem e categorias reconhecidas pela comunidade) e não como um experimento isolado de ML.
+
+> **Nota de honestidade acadêmica**: os IDs abaixo vêm de buscas e de mirrors de terceiros do ATLAS, não de uma consulta direta e completa ao site oficial (`atlas.mitre.org`) durante a escrita deste documento. Os nomes das táticas/técnicas e a lógica do mapeamento estão corretos; antes de citar um ID específico (ex. em uma apresentação), vale confirmar na [matriz oficial](https://atlas.mitre.org/matrices/ATLAS).
+
+| Nosso ataque/código | Tática ATLAS | Técnica ATLAS |
+|---|---|---|
+| `attack.py` (FGSM/PGD) — ataque com acesso aos pesos | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.000 *White-Box Optimization* |
+| `patch_attack.py` (patch físico, EoT) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → AML.T0043.000 *White-Box Optimization* (usa gradiente; a "entrega" do ataque é que é física, não digital) |
+| `blackbox_attack.py` (SimBA) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.001 *Black-Box Optimization* |
+| Qualquer um dos ataques acima, do ponto de vista do efeito final (a classificação sair errada) | Tática de impacto/evasão (varia por mapeamento) | AML.T0015 *Evade ML Model* |
+
+| Nossa mitigação/código | Mitigação ATLAS |
+|---|---|
+| `train.py --adv-treino` (adversarial training) | AML.M0003 *Model Hardening* |
+| `--limiar` em `predict.py` (classe "desconhecido") | Aproximação fraca de AML.M0015 *Adversarial Input Detection* — hoje só detecta baixa confiança em geral, não é desenhado especificamente para detectar entrada adversarial (ver "Limitações" abaixo) |
+| *(não implementado)* rate limiting de consultas | AML.M0004 *Restrict Number of AI Model Queries* — mitigação direta contra o ataque black-box (SimBA), que precisa de milhares de consultas pra convergir |
+
+### Limitações desse mapeamento
+
+- O `--limiar` de confiança não foi desenhado como defesa contra ataque adversarial — ele resolve um problema diferente (placa fora das 43 classes do GTSRB). Um ataque adversarial bem-sucedido tende a produzir uma predição com confiança *alta* na classe errada (como os testes acima mostram: 95-99% de confiança), então o limiar não pega esses casos. Citar isso como limitação é mais honesto do que reivindicar uma defesa que não existe.
+- Não implementamos AML.M0004 (rate limiting) de fato — é uma mitigação de infraestrutura/API, fora do escopo deste repositório, que só faz sentido quando o modelo está de fato atrás de uma API servindo requisições.
