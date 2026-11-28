@@ -39,7 +39,32 @@ python train.py --epochs 10
 
 Na primeira vez o dataset é baixado para a pasta `data/`. A cada época o modelo é avaliado no conjunto de teste e só o melhor checkpoint fica salvo em `sinalnet.pt`. No final aparece a acurácia de cada classe junto com a classe com que ela mais se confunde, o que ajuda a ver onde o modelo erra. Também dá para passar `--batch-size`, `--lr`, `--data`, `--out` e `--workers`.
 
-Para deixar o modelo mais robusto em fotos e vídeos reais, o treino usa rotação, translação, mudança de escala, perspectiva, variação de brilho e contraste e um pouco de desfoque. Não usamos flip horizontal porque ele transformaria "vire à esquerda" em "vire à direita".
+Para deixar o modelo mais robusto em fotos e vídeos reais, o treino usa rotação, translação, mudança de escala, perspectiva, variação de brilho e contraste, um pouco de desfoque, ruído gaussiano e oclusão parcial aleatória (`RandomErasing`, simulando sujeira, adesivo ou sombra na placa) — pensado para placas vistas em condições difíceis, não só fotos perfeitas. Não usamos flip horizontal porque ele transformaria "vire à esquerda" em "vire à direita".
+
+### Adversarial training (treino robusto a ataques)
+
+```bash
+python train.py --epochs 40 --adv-treino --out sinalnet_robusto.pt
+```
+
+Com `--adv-treino`, cada batch é substituído pela sua versão adversarial (gerada com PGD, usando o próprio modelo em treino) antes do passo de otimização — a ideia do Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks". Dá pra ajustar a força do ataque usado no treino com `--adv-eps`, `--adv-alpha` e `--adv-passos`. No final, além do relatório por classe, é impressa a acurácia do modelo sob um ataque PGD no conjunto de teste, para medir o quanto ele ficou mais robusto.
+
+Esse treino é bem mais lento que o normal (cada batch faz `--adv-passos` rodadas extras de forward/backward para gerar o ataque) e também converge mais devagar, precisando de mais épocas: com só 10 épocas a acurácia ficou bem abaixo do modelo normal (sinal de que o treino ainda não tinha convergido). Com 40 épocas chegamos a **77,41%** de acurácia limpa e **53,63%** sob ataque PGD (eps=0,03) nas imagens de teste — abaixo dos 97,69% do modelo normal (o trade-off conhecido entre robustez e acurácia), mas a acurácia ainda estava subindo devagar no final, então mais épocas devem melhorar os dois números.
+
+## Ataques adversariais
+
+```bash
+python attack.py placa.jpg --eps 0.05                          # FGSM, nao-direcionado
+python attack.py placa.jpg --metodo pgd --eps 0.05 --passos 10 # PGD, mais forte
+python attack.py placa.jpg --metodo pgd --direcionado --classe 14 --eps 0.08 --passos 20
+```
+
+`attack.py` perturba a imagem para enganar a `SinalNet`, imprimindo a predição antes e depois do ataque e salvando a versão perturbada (`--salvar`). Dois métodos:
+
+- **FGSM** (passo único): rápido, mas perturbação mais fraca.
+- **PGD** (iterativo, `--alpha` e `--passos`): repete o passo do FGSM várias vezes, projetando de volta na bola de raio `--eps` a cada iteração; consideravelmente mais forte.
+
+Sem `--classe`, o ataque é não-direcionado: usa a própria predição do modelo como alvo a evitar. Com `--direcionado --classe N`, o ataque força o modelo a prever especificamente a classe `N`.
 
 ## Resultados
 
@@ -84,7 +109,9 @@ Além dessas, `preparar_imagem` transforma a imagem num tensor `[1, 3, 48, 48]`,
 ## Arquivos
 
 - `model.py`: nomes das classes, camada de normalização e a SinalNet
-- `train.py`: treino e avaliação
+- `train.py`: treino, avaliação e adversarial training
+- `augmentacao.py`: transforms extras de augmentation usados no treino
 - `predict.py`: funções de inferência para imagem e vídeo e a linha de comando
+- `attack.py`: ataques adversariais (FGSM/PGD) contra o modelo
 - `sinalnet.pt`: pesos treinados
 - `tests/`: testes automatizados (pytest) de `model.py` e `predict.py`
