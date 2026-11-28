@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from attack import pgd
+from ataques.attack import pgd
 from augmentacao import ruido_gaussiano
 from model import CLASSES, IMG_SIZE, NUM_CLASSES, SinalNet, escolher_device
 

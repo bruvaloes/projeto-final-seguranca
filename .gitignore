@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # imagens e videos de teste
 *.mp4
