@@ -4,6 +4,8 @@ Classificador de placas de trânsito feito para o trabalho de Segurança Computa
 
 A rede recebe imagens RGB de 48×48 com os pixels entre 0 e 1. Deixamos a normalização dentro do próprio modelo, e não no pré-processamento, porque assim dá para mexer direto nos pixels da imagem sem ter que desfazer a normalização depois.
 
+A análise de ameaça, risco e os ataques além do FGSM/PGD (patch físico, black-box) estão em [SEGURANCA.md](SEGURANCA.md).
+
 ## Instalação
 
 ```bash
