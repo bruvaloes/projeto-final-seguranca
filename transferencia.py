@@ -3,8 +3,8 @@ import argparse
 import torch
 
 from ataques.attack import pgd
-from eval_robustez import carregar
 from model import escolher_device
+from predict import carregar_modelo
 from train import criar_loaders
 
 
@@ -48,8 +48,8 @@ def main():
     print(f"usando {device}")
     _, loader_teste = criar_loaders(args.data, args.batch_size, args.workers)
 
-    normal = carregar(args.normal, device)
-    robusto = carregar(args.robusto, device)
+    normal = carregar_modelo(args.normal)
+    robusto = carregar_modelo(args.robusto)
 
     print(f"\ngerando adversariais (PGD, eps={args.eps}) a partir do modelo NORMAL:")
     acc_normal, acc_robusto = avaliar_transferencia(

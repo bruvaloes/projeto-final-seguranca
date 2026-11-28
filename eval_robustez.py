@@ -4,7 +4,8 @@ import csv
 import torch
 
 from ataques.attack import fgsm, pgd
-from model import SinalNet, escolher_device
+from model import escolher_device
+from predict import carregar_modelo
 from train import criar_loaders
 
 
@@ -33,14 +34,6 @@ def avaliar_sweep(model, loader, device, metodo, eps_lista, alpha, passos, limit
     return {eps: c / t for eps, (c, t) in contagem.items()}
 
 
-def carregar(caminho, device):
-    checkpoint = torch.load(caminho, map_location=device, weights_only=True)
-    model = SinalNet().to(device)
-    model.load_state_dict(checkpoint["model"])
-    model.eval()
-    return model
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="curva de acuracia vs forca do ataque (FGSM/PGD), no conjunto de teste do GTSRB")
@@ -64,7 +57,7 @@ def main():
 
     linhas = []
     for caminho in args.modelo:
-        model = carregar(caminho, device)
+        model = carregar_modelo(caminho)
         resultado = avaliar_sweep(model, loader_teste, device, args.metodo,
                                    args.eps, args.alpha, args.passos, args.amostra)
         print(f"\n{caminho} ({args.metodo}):")
