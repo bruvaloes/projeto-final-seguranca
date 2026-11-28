@@ -9,10 +9,14 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from model import CLASSES, IMG_SIZE, SinalNet
+from model import CLASSES, IMG_SIZE, SinalNet, escolher_device
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = escolher_device()
 EXTENSOES_VIDEO = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
+
+# o modelo sempre responde uma das 43 classes, mesmo para uma imagem que nao
+# e nenhuma placa do GTSRB; abaixo deste limiar tratamos como "desconhecido"
+LIMIAR_PADRAO = 0.5
 
 _transform = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
@@ -55,6 +59,10 @@ def classificar_tensor(model, x, top_k=3):
 
 def classificar(model, imagem, top_k=3):
     return classificar_tensor(model, preparar_imagem(imagem), top_k)
+
+
+def desconhecido(resultado, limiar=LIMIAR_PADRAO):
+    return resultado[0]["confianca"] < limiar
 
 
 def tensor_para_imagem(x, tamanho=256):
@@ -105,7 +113,7 @@ def classificar_video(model, caminho, a_cada_n_frames=5, suavizacao=5, top_k=3):
         cap.release()
 
 
-def rodar_webcam(model, camera=0, suavizacao=5):
+def rodar_webcam(model, camera=0, suavizacao=5, limiar=LIMIAR_PADRAO):
     # so para testes locais; a interface oficial e a da Bruna
     cap = cv2.VideoCapture(camera)
     if not cap.isOpened():
@@ -117,9 +125,13 @@ def rodar_webcam(model, camera=0, suavizacao=5):
             if not ok:
                 break
             ultimas.append(probabilidades(model, preparar_imagem(frame_para_imagem(frame))))
-            top = _top_k(torch.stack(list(ultimas)).mean(0), 1)[0]
-            # cv2.putText nao desenha acentos, entao mostramos o numero da classe junto
-            texto = f"{top['classe']}: {top['nome']} ({top['confianca'] * 100:.0f}%)"
+            resultado = _top_k(torch.stack(list(ultimas)).mean(0), 1)
+            top = resultado[0]
+            if desconhecido(resultado, limiar):
+                texto = f"desconhecido ({top['confianca'] * 100:.0f}%)"
+            else:
+                # cv2.putText nao desenha acentos, entao mostramos o numero da classe junto
+                texto = f"{top['classe']}: {top['nome']} ({top['confianca'] * 100:.0f}%)"
             cv2.putText(frame, texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4)
             cv2.putText(frame, texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.imshow("SinalNet - q para sair", frame)
@@ -130,7 +142,9 @@ def rodar_webcam(model, camera=0, suavizacao=5):
         cv2.destroyAllWindows()
 
 
-def imprimir_resultado(resultado):
+def imprimir_resultado(resultado, limiar=LIMIAR_PADRAO):
+    if desconhecido(resultado, limiar):
+        print(f"  desconhecido (confianca maxima {resultado[0]['confianca'] * 100:.2f}% abaixo do limiar)")
     for r in resultado:
         print(f"  {r['confianca'] * 100:6.2f}%  {r['nome']} (classe {r['classe']})")
 
@@ -144,6 +158,8 @@ def main():
     parser.add_argument("--suavizacao", type=int, default=5, help="no video, media dos ultimos K frames (1 desliga)")
     parser.add_argument("--webcam", action="store_true", help="classifica ao vivo pela camera")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--limiar", type=float, default=LIMIAR_PADRAO,
+                         help="confianca minima para nao tratar como desconhecido")
     args = parser.parse_args()
     if not args.webcam and not args.arquivo:
         parser.error("informe um arquivo ou use --webcam")
@@ -151,14 +167,15 @@ def main():
     model = carregar_modelo(args.modelo)
 
     if args.webcam:
-        rodar_webcam(model, args.camera, args.suavizacao)
+        rodar_webcam(model, args.camera, args.suavizacao, args.limiar)
     elif os.path.splitext(args.arquivo)[1].lower() in EXTENSOES_VIDEO:
         for r in classificar_video(model, args.arquivo, args.a_cada, args.suavizacao, top_k=1):
             top = r["resultado"][0]
-            print(f"{r['tempo_s']:6.2f}s  frame {r['frame']:5d}  {top['confianca'] * 100:6.2f}%  {top['nome']}")
+            nome = "desconhecido" if desconhecido(r["resultado"], args.limiar) else top["nome"]
+            print(f"{r['tempo_s']:6.2f}s  frame {r['frame']:5d}  {top['confianca'] * 100:6.2f}%  {nome}")
     else:
         print(args.arquivo)
-        imprimir_resultado(classificar(model, args.arquivo, args.top_k))
+        imprimir_resultado(classificar(model, args.arquivo, args.top_k), args.limiar)
 
 
 if __name__ == "__main__":

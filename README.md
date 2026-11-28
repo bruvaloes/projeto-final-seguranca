@@ -14,6 +14,12 @@ pip install -r requirements.txt
 
 Isso instala o PyTorch padrão, que já é suficiente para usar o modelo. Os pesos treinados estão em `sinalnet.pt` e funcionam em qualquer máquina, com ou sem GPU. O código detecta sozinho a melhor opção disponível: CUDA (NVIDIA), depois MPS (GPU integrada dos Macs com Apple Silicon) e por último CPU.
 
+Para rodar os testes (`pip install -r requirements-dev.txt`):
+
+```bash
+pytest tests/
+```
+
 ### Treinando com GPU AMD (opcional)
 
 Treinamos numa RX 9060 XT no Windows. Para o PyTorch enxergar uma placa AMD é preciso instalar a versão com ROCm a partir do repositório da AMD, trocando `gfx1200` pela arquitetura da sua placa se for outra (a lista está no [repositório TheRock](https://github.com/ROCm/TheRock/blob/main/RELEASES.md)):
@@ -66,7 +72,7 @@ Com 10 épocas o modelo chegou a **97,69%** de acurácia nas 12.630 imagens de t
 
 A maioria das classes passa de 97%. Os erros se concentram em placas que ficam muito parecidas em 48×48, como travessia de pedestres (50%), que o modelo confunde com preferência no próximo cruzamento, e velocidade máxima de 20 km/h (70%), que vira 30 km/h. Um detalhe que achamos curioso é que a acurácia no treino (92,5%) ficou abaixo da de teste, o que acontece porque as imagens de treino passam pelo augmentation e pelo dropout. O split de treino do `torchvision` tem 26.640 imagens.
 
-Como o modelo só viu placas alemãs, ainda não testamos direito com placas brasileiras. A expectativa é que ele acerte as que são parecidas com as de lá, como Pare, Dê a preferência, Sentido proibido e velocidade máxima, e erre as de advertência, que no Brasil são losangos amarelos, e as de obrigação, que na Alemanha são azuis. Ele também sempre responde uma das 43 classes, mesmo quando a placa não existe no dataset.
+Como o modelo só viu placas alemãs, ainda não testamos direito com placas brasileiras. A expectativa é que ele acerte as que são parecidas com as de lá, como Pare, Dê a preferência, Sentido proibido e velocidade máxima, e erre as de advertência, que no Brasil são losangos amarelos, e as de obrigação, que na Alemanha são azuis. Por padrão ele sempre responde uma das 43 classes, mesmo quando a placa não existe no dataset — por isso o `--limiar` de confiança em `predict.py` (veja a seção seguinte).
 
 ## Classificando imagens e vídeos
 
@@ -75,9 +81,12 @@ python predict.py placa.jpg            # mostra as 3 classes mais prováveis
 python predict.py video.mp4            # mostra a classe ao longo do vídeo
 python predict.py video.mp4 --a-cada 5 --suavizacao 5
 python predict.py --webcam             # abre a câmera, q para sair
+python predict.py placa.jpg --limiar 0.7
 ```
 
 O modelo classifica a imagem inteira e não procura onde está a placa, por isso funciona melhor quando a placa ocupa boa parte da foto ou do quadro. No vídeo ele analisa um frame a cada N e tira a média das probabilidades dos últimos frames analisados, para a classe não ficar trocando de um frame para o outro.
+
+Como o modelo sempre responde uma das 43 classes, mesmo quando a imagem não é nenhuma placa do GTSRB, `--limiar` (padrão 0,5) marca como "desconhecido" sempre que a confiança máxima ficar abaixo dele.
 
 ## Usando na interface
 
@@ -105,3 +114,4 @@ Além dessas, `preparar_imagem` transforma a imagem num tensor `[1, 3, 48, 48]`,
 - `predict.py`: funções de inferência para imagem e vídeo e a linha de comando
 - `attack.py`: ataques adversariais (FGSM/PGD) contra o modelo
 - `sinalnet.pt`: pesos treinados
+- `tests/`: testes automatizados (pytest) de `model.py` e `predict.py`
