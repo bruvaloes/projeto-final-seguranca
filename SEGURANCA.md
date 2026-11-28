@@ -101,13 +101,31 @@ python -m analise.eval_robustez --modelo sinalnet.pt sinalnet_robusto.pt --eps 0
 
 Resultado medido (amostra de 512 imagens, PGD, 5 passos):
 
-| eps | `sinalnet.pt` (normal) | `sinalnet_robusto.pt` (adv. training, 40 épocas) |
+| eps | `sinalnet.pt` (normal) | `sinalnet_robusto.pt` (adv. training, 80 épocas, com warm-up de eps e mistura 70/30) |
 |---|---|---|
-| 0,00 | 97,5% | 77,5% |
-| 0,03 | 14,3% | 56,8% |
-| 0,08 | 10,4% | 45,5% |
+| 0,00 | 97,5% | 93,2% |
+| 0,03 | 14,3% | 65,2% |
+| 0,08 | 10,4% | 51,8% |
 
-A curva deixa visual o que as seções anteriores só descreviam em texto: o modelo normal **colapsa** assim que o ataque aparece (97,5% → 14,3% com eps=0,03, uma queda de 83 pontos), enquanto o robusto perde acurácia de forma muito mais suave (77,5% → 56,8%, queda de 21 pontos) — ao custo de já começar mais baixo mesmo sem ataque.
+A curva deixa visual o que as seções anteriores só descreviam em texto: o modelo normal **colapsa** assim que o ataque aparece (97,5% → 14,3% com eps=0,03, uma queda de 83 pontos), enquanto o robusto perde acurácia de forma muito mais suave (93,2% → 65,2%, queda de 28 pontos). Com os ajustes de hiperparâmetro (warm-up do eps, só atacar 70% do batch), o robusto chegou bem mais perto da acurácia limpa do normal do que na primeira tentativa (77,5% → 93,2%), sem perder a robustez — as duas métricas melhoraram juntas, não é só um ponto diferente na mesma troca.
+
+## A defesa generaliza para outros ataques?
+
+O adversarial training só foi treinado contra PGD. Isso levanta uma pergunta óbvia: será que ele também ajuda contra os outros dois ataques (patch físico, black-box), que nunca viu durante o treino? `avaliar_defesas.py` testa isso, rodando os dois ataques contra os dois checkpoints numa amostra de imagens de teste.
+
+```bash
+python -m analise.avaliar_defesas --amostra 20
+```
+
+Resultado medido (20 imagens, ataque não-direcionado):
+
+| Ataque | `sinalnet.pt` (normal) | `sinalnet_robusto.pt` (robusto) | Redução |
+|---|---|---|---|
+| PGD (eps=0,03) — o que o treino usa | ~86% de sucesso | ~39% de sucesso | **-47 pontos** |
+| Patch físico | 85% de sucesso | 50% de sucesso | **-35 pontos** |
+| Black-box (SimBA) | 85% de sucesso | 60% de sucesso | **-25 pontos** |
+
+**Achado**: a defesa **generaliza parcialmente** — reduz o sucesso dos outros dois ataques também, mesmo nunca tendo visto nenhum deles no treino. Mas a redução fica cada vez mais fraca conforme o ataque se afasta do que foi usado pra treinar: PGD (o próprio ataque de treino) cai 47 pontos, o patch físico (ainda baseado em gradiente, mas numa região restrita e com robustez a transformação) cai 35, e o black-box (nem usa gradiente) cai só 25. Isso é consistente com a intuição de que adversarial training aprende a resistir a uma *direção* específica de perturbação, não a qualquer perturbação — quanto mais diferente o ataque, menos a defesa generaliza.
 
 ## Transferência entre os dois modelos
 
@@ -122,11 +140,11 @@ Resultado medido (2.048 imagens de teste):
 | Adversarial gerado em → avaliado em | Acurácia |
 |---|---|
 | normal → normal (branco, mesmo modelo) | 11,0% |
-| normal → robusto (transferência) | 72,9% |
-| robusto → robusto (branco, mesmo modelo) | 52,8% |
-| robusto → normal (transferência) | 69,8% |
+| normal → robusto (transferência) | 88,8% |
+| robusto → robusto (branco, mesmo modelo) | 60,7% |
+| robusto → normal (transferência) | 64,7% |
 
-**Achado**: a transferência é baixa nos dois sentidos — um adversarial feito pro modelo normal mal afeta o robusto (72,9%, quase a acurácia limpa dele) e vice-versa. Isso quer dizer que a robustez de um modelo adversarialmente treinado não é "genérica": ela é relativamente específica ao próprio modelo. Do ponto de vista de ameaça, isso é uma boa notícia (um atacante não consegue treinar um substituto parecido e reusar os adversariais direto num sistema diferente com muita facilidade), mas também significa que validar a robustez de **um** modelo não garante nada sobre outro modelo, mesmo que pareçam similares.
+**Achado**: a transferência é baixa nos dois sentidos — um adversarial feito pro modelo normal quase não afeta o robusto (88,8%, perto da acurácia limpa dele) e vice-versa (64,7%, uma queda real a partir dos ~97,5% limpo do normal, mas ainda bem acima do que o ataque consegue no próprio modelo em que foi gerado). Isso quer dizer que a robustez de um modelo adversarialmente treinado não é "genérica": ela é relativamente específica ao próprio modelo. Do ponto de vista de ameaça, isso é uma boa notícia (um atacante não consegue treinar um substituto parecido e reusar os adversariais direto num sistema diferente com muita facilidade), mas também significa que validar a robustez de **um** modelo não garante nada sobre outro modelo, mesmo que pareçam similares.
 
 ## Tentativa de detecção de entrada adversarial (resultado negativo)
 

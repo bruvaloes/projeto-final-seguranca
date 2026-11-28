@@ -51,7 +51,7 @@ python -m sinalnet.train --epochs 40 --adv-treino --out sinalnet_robusto.pt
 
 Com `--adv-treino`, cada batch é substituído pela sua versão adversarial (gerada com PGD, usando o próprio modelo em treino) antes do passo de otimização — a ideia do Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks". Dá pra ajustar a força do ataque usado no treino com `--adv-eps`, `--adv-alpha` e `--adv-passos`. No final, além do relatório por classe, é impressa a acurácia do modelo sob um ataque PGD no conjunto de teste, para medir o quanto ele ficou mais robusto.
 
-Esse treino é bem mais lento que o normal (cada batch faz `--adv-passos` rodadas extras de forward/backward para gerar o ataque) e também converge mais devagar, precisando de mais épocas: com só 10 épocas a acurácia ficou bem abaixo do modelo normal (sinal de que o treino ainda não tinha convergido). Com 40 épocas chegamos a **77,41%** de acurácia limpa e **53,63%** sob ataque PGD (eps=0,03) nas imagens de teste — abaixo dos 97,69% do modelo normal (o trade-off conhecido entre robustez e acurácia), mas a acurácia ainda estava subindo devagar no final, então mais épocas devem melhorar os dois números.
+Esse treino é bem mais lento que o normal (cada batch faz `--adv-passos` rodadas extras de forward/backward para gerar o ataque) e também converge mais devagar, precisando de mais épocas. Com 80 épocas, warm-up do eps (`--adv-warmup`) e atacando só 70% de cada batch (`--adv-proporcao`), chegamos a **95,50%** de acurácia limpa e **61,07%** sob ataque PGD (eps=0,03) nas imagens de teste — bem mais perto dos 97,69% do modelo normal do que numa primeira tentativa sem esses ajustes (que travou em 77,41%/53,63% com 40 épocas). Detalhes de como esses ataques generalizam (ou não) para outros tipos de ataque estão no [SEGURANCA.md](SEGURANCA.md).
 
 ## Ataques adversariais
 
@@ -122,6 +122,7 @@ Além dessas, `preparar_imagem` transforma a imagem num tensor `[1, 3, 48, 48]`,
 - `analise/`: avaliação quantitativa dos ataques e defesas
   - `eval_robustez.py`: curva de acurácia × força do ataque (FGSM/PGD) no conjunto de teste inteiro
   - `transferencia.py`: testa se exemplos adversariais de um modelo enganam o outro
+  - `avaliar_defesas.py`: testa se o adversarial training (treinado só contra PGD) também reduz o patch físico e o black-box
   - `deteccao.py`: tentativa (sem sucesso, documentada) de detectar entrada adversarial
 - `tests/`: testes automatizados (pytest) de `sinalnet/model.py` e `sinalnet/predict.py`
 - `sinalnet.pt`: pesos treinados
