@@ -3,6 +3,14 @@ import torch.nn as nn
 
 IMG_SIZE = 48
 
+
+def escolher_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
 # nomes na ordem oficial dos rotulos do GTSRB (0 a 42)
 CLASSES = [
     "Velocidade máxima 20 km/h",
