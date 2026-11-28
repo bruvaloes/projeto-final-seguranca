@@ -4,9 +4,9 @@ import csv
 import torch
 
 from ataques.attack import fgsm, pgd
-from model import escolher_device
-from predict import carregar_modelo
-from train import criar_loaders
+from sinalnet.model import escolher_device
+from sinalnet.predict import carregar_modelo
+from sinalnet.train import criar_loaders
 
 
 def avaliar_sweep(model, loader, device, metodo, eps_lista, alpha, passos, limite_amostras=None):

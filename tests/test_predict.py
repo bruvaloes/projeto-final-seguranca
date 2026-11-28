@@ -2,8 +2,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from model import NUM_CLASSES, SinalNet
-from predict import DEVICE, classificar_tensor, desconhecido, preparar_imagem
+from sinalnet.model import NUM_CLASSES, SinalNet
+from sinalnet.predict import DEVICE, classificar_tensor, desconhecido, preparar_imagem
 
 
 def test_preparar_imagem_aceita_pil_e_normaliza_para_0_1():

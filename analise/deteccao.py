@@ -2,7 +2,7 @@ import argparse
 
 import torch
 
-from predict import DEVICE, _top_k, carregar_modelo, imprimir_resultado, preparar_imagem, probabilidades
+from sinalnet.predict import DEVICE, _top_k, carregar_modelo, imprimir_resultado, preparar_imagem, probabilidades
 
 
 @torch.no_grad()

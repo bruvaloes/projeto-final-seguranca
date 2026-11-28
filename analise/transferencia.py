@@ -3,9 +3,9 @@ import argparse
 import torch
 
 from ataques.attack import pgd
-from model import escolher_device
-from predict import carregar_modelo
-from train import criar_loaders
+from sinalnet.model import escolher_device
+from sinalnet.predict import carregar_modelo
+from sinalnet.train import criar_loaders
 
 
 @torch.no_grad()

@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-from model import CLASSES, IMG_SIZE, SinalNet, escolher_device
+from .model import CLASSES, IMG_SIZE, SinalNet, escolher_device
 
 DEVICE = escolher_device()
 EXTENSOES_VIDEO = {".mp4", ".avi", ".mov", ".mkv", ".webm"}

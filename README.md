@@ -36,7 +36,7 @@ Mesmo sendo AMD, essa versão do PyTorch aparece como `cuda`, então o código n
 ## Treino
 
 ```bash
-python train.py --epochs 10
+python -m sinalnet.train --epochs 10
 ```
 
 Na primeira vez o dataset é baixado para a pasta `data/`. A cada época o modelo é avaliado no conjunto de teste e só o melhor checkpoint fica salvo em `sinalnet.pt`. No final aparece a acurácia de cada classe junto com a classe com que ela mais se confunde, o que ajuda a ver onde o modelo erra. Também dá para passar `--batch-size`, `--lr`, `--data`, `--out` e `--workers`.
@@ -46,7 +46,7 @@ Para deixar o modelo mais robusto em fotos e vídeos reais, o treino usa rotaç�
 ### Adversarial training (treino robusto a ataques)
 
 ```bash
-python train.py --epochs 40 --adv-treino --out sinalnet_robusto.pt
+python -m sinalnet.train --epochs 40 --adv-treino --out sinalnet_robusto.pt
 ```
 
 Com `--adv-treino`, cada batch é substituído pela sua versão adversarial (gerada com PGD, usando o próprio modelo em treino) antes do passo de otimização — a ideia do Madry et al., "Towards Deep Learning Models Resistant to Adversarial Attacks". Dá pra ajustar a força do ataque usado no treino com `--adv-eps`, `--adv-alpha` e `--adv-passos`. No final, além do relatório por classe, é impressa a acurácia do modelo sob um ataque PGD no conjunto de teste, para medir o quanto ele ficou mais robusto.
@@ -56,9 +56,9 @@ Esse treino é bem mais lento que o normal (cada batch faz `--adv-passos` rodada
 ## Ataques adversariais
 
 ```bash
-python ataques/attack.py placa.jpg --eps 0.05                          # FGSM, nao-direcionado
-python ataques/attack.py placa.jpg --metodo pgd --eps 0.05 --passos 10 # PGD, mais forte
-python ataques/attack.py placa.jpg --metodo pgd --direcionado --classe 14 --eps 0.08 --passos 20
+python -m ataques.attack placa.jpg --eps 0.05                          # FGSM, nao-direcionado
+python -m ataques.attack placa.jpg --metodo pgd --eps 0.05 --passos 10 # PGD, mais forte
+python -m ataques.attack placa.jpg --metodo pgd --direcionado --classe 14 --eps 0.08 --passos 20
 ```
 
 `ataques/attack.py` perturba a imagem para enganar a `SinalNet`, imprimindo a predição antes e depois do ataque e salvando a versão perturbada (`--salvar`). Dois métodos:
@@ -74,16 +74,16 @@ Com 10 épocas o modelo chegou a **97,69%** de acurácia nas 12.630 imagens de t
 
 A maioria das classes passa de 97%. Os erros se concentram em placas que ficam muito parecidas em 48×48, como travessia de pedestres (50%), que o modelo confunde com preferência no próximo cruzamento, e velocidade máxima de 20 km/h (70%), que vira 30 km/h. Um detalhe que achamos curioso é que a acurácia no treino (92,5%) ficou abaixo da de teste, o que acontece porque as imagens de treino passam pelo augmentation e pelo dropout. O split de treino do `torchvision` tem 26.640 imagens.
 
-Como o modelo só viu placas alemãs, ainda não testamos direito com placas brasileiras. A expectativa é que ele acerte as que são parecidas com as de lá, como Pare, Dê a preferência, Sentido proibido e velocidade máxima, e erre as de advertência, que no Brasil são losangos amarelos, e as de obrigação, que na Alemanha são azuis. Por padrão ele sempre responde uma das 43 classes, mesmo quando a placa não existe no dataset — por isso o `--limiar` de confiança em `predict.py` (veja a seção seguinte).
+Como o modelo só viu placas alemãs, ainda não testamos direito com placas brasileiras. A expectativa é que ele acerte as que são parecidas com as de lá, como Pare, Dê a preferência, Sentido proibido e velocidade máxima, e erre as de advertência, que no Brasil são losangos amarelos, e as de obrigação, que na Alemanha são azuis. Por padrão ele sempre responde uma das 43 classes, mesmo quando a placa não existe no dataset — por isso o `--limiar` de confiança em `sinalnet/predict.py` (veja a seção seguinte).
 
 ## Classificando imagens e vídeos
 
 ```bash
-python predict.py placa.jpg            # mostra as 3 classes mais prováveis
-python predict.py video.mp4            # mostra a classe ao longo do vídeo
-python predict.py video.mp4 --a-cada 5 --suavizacao 5
-python predict.py --webcam             # abre a câmera, q para sair
-python predict.py placa.jpg --limiar 0.7
+python -m sinalnet.predict placa.jpg            # mostra as 3 classes mais prováveis
+python -m sinalnet.predict video.mp4            # mostra a classe ao longo do vídeo
+python -m sinalnet.predict video.mp4 --a-cada 5 --suavizacao 5
+python -m sinalnet.predict --webcam             # abre a câmera, q para sair
+python -m sinalnet.predict placa.jpg --limiar 0.7
 ```
 
 O modelo classifica a imagem inteira e não procura onde está a placa, por isso funciona melhor quando a placa ocupa boa parte da foto ou do quadro. No vídeo ele analisa um frame a cada N e tira a média das probabilidades dos últimos frames analisados, para a classe não ficar trocando de um frame para o outro.
@@ -93,7 +93,7 @@ Como o modelo sempre responde uma das 43 classes, mesmo quando a imagem não é 
 ## Usando na interface
 
 ```python
-from predict import carregar_modelo, classificar, classificar_frame, classificar_video
+from sinalnet.predict import carregar_modelo, classificar, classificar_frame, classificar_video
 
 model = carregar_modelo("sinalnet.pt")
 
@@ -110,17 +110,19 @@ Além dessas, `preparar_imagem` transforma a imagem num tensor `[1, 3, 48, 48]`,
 
 ## Arquivos
 
-- `model.py`: nomes das classes, camada de normalização e a SinalNet
-- `train.py`: treino, avaliação e adversarial training
-- `augmentacao.py`: transforms extras de augmentation usados no treino
-- `predict.py`: funções de inferência para imagem e vídeo e a linha de comando
+- `sinalnet/`: núcleo do projeto (modelo, treino e inferência)
+  - `model.py`: nomes das classes, camada de normalização e a SinalNet
+  - `train.py`: treino, avaliação e adversarial training
+  - `augmentacao.py`: transforms extras de augmentation usados no treino
+  - `predict.py`: funções de inferência para imagem e vídeo e a linha de comando
 - `ataques/`: scripts de ataque adversarial contra o modelo
   - `attack.py`: FGSM e PGD (acesso aos pesos)
   - `patch_attack.py`: patch físico robusto a ângulo/escala/brilho (EoT)
   - `blackbox_attack.py`: ataque baseado em consultas, sem gradiente (SimBA)
-- `eval_robustez.py`: curva de acurácia × força do ataque (FGSM/PGD) no conjunto de teste inteiro
-- `transferencia.py`: testa se exemplos adversariais de um modelo enganam o outro
-- `deteccao.py`: tentativa (sem sucesso, documentada) de detectar entrada adversarial
+- `analise/`: avaliação quantitativa dos ataques e defesas
+  - `eval_robustez.py`: curva de acurácia × força do ataque (FGSM/PGD) no conjunto de teste inteiro
+  - `transferencia.py`: testa se exemplos adversariais de um modelo enganam o outro
+  - `deteccao.py`: tentativa (sem sucesso, documentada) de detectar entrada adversarial
+- `tests/`: testes automatizados (pytest) de `sinalnet/model.py` e `sinalnet/predict.py`
 - `sinalnet.pt`: pesos treinados
-- `tests/`: testes automatizados (pytest) de `model.py` e `predict.py`
 - `SEGURANCA.md`: análise de risco, cenário de ameaça e mapeamento MITRE ATLAS

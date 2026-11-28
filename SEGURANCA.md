@@ -1,6 +1,6 @@
 # Análise de segurança
 
-Este documento trata a SinalNet como o alvo de uma análise de risco, não como um projeto de machine learning: o objetivo é entender o que um atacante pode fazer contra o modelo, o quão viável isso é, e o que mitiga cada risco. O código (`ataques/attack.py`, `train.py`, `predict.py`) é a ferramenta usada para investigar essas perguntas, não o produto final do trabalho.
+Este documento trata a SinalNet como o alvo de uma análise de risco, não como um projeto de machine learning: o objetivo é entender o que um atacante pode fazer contra o modelo, o quão viável isso é, e o que mitiga cada risco. O código (`ataques/attack.py`, `sinalnet/train.py`, `sinalnet/predict.py`) é a ferramenta usada para investigar essas perguntas, não o produto final do trabalho.
 
 ## Modelo de ameaça e risco
 
@@ -48,8 +48,8 @@ A superfície física é a que mais justifica chamar isso de "projeto de seguran
 `ataques/patch_attack.py` implementa a superfície física descrita acima: em vez de perturbar a imagem inteira (FGSM/PGD), otimiza um pequeno adesivo quadrado — um patch — colado num canto fixo da placa, que precisa continuar enganando o modelo mesmo sob variações de ângulo, distância e iluminação da foto.
 
 ```bash
-python ataques/patch_attack.py placa.jpg                                   # nao-direcionado
-python ataques/patch_attack.py placa.jpg --classe 14 --tamanho 24 --passos 600  # forca "Pare"
+python -m ataques.patch_attack placa.jpg                                   # nao-direcionado
+python -m ataques.patch_attack placa.jpg --classe 14 --tamanho 24 --passos 600  # forca "Pare"
 ```
 
 A técnica é **Expectation over Transformation** (EoT, de Athalye et al., "Synthesizing Robust Adversarial Examples"): a cada passo do treino do patch, em vez de calcular o gradiente numa única versão da imagem, tiramos a média do gradiente sobre `--amostras-por-passo` versões com rotação, translação, escala e brilho aleatórios (`_compor` em `ataques/patch_attack.py`). Isso é o que diferencia esse ataque do FGSM/PGD: o patch não é otimizado pra uma foto específica, é otimizado pra sobreviver a uma distribuição de condições de captura — o requisito real de um adesivo físico.
@@ -61,8 +61,8 @@ A técnica é **Expectation over Transformation** (EoT, de Athalye et al., "Synt
 Todos os ataques anteriores (FGSM, PGD, o patch) assumem acesso aos pesos do modelo para calcular o gradiente — **white-box**. Um atacante real contra um sistema implantado (por trás de uma API, ou de um binário que ele não conseguiu extrair os pesos) normalmente não tem isso. `ataques/blackbox_attack.py` implementa o **SimBA** (Guo et al., "Simple Black-box Adversarial Attacks"): a cada passo, tenta perturbar um pixel aleatório pra cima ou pra baixo e só olha se a probabilidade da classe de interesse melhorou — nunca usa `.backward()` nem acessa gradiente, só consulta a saída do modelo (`model(x)`), que é exatamente o que um atacante com apenas acesso de API conseguiria fazer.
 
 ```bash
-python ataques/blackbox_attack.py placa.jpg                                    # nao-direcionado
-python ataques/blackbox_attack.py placa.jpg --classe 14 --passos 6912 --step 0.3  # forca "Pare"
+python -m ataques.blackbox_attack placa.jpg                                    # nao-direcionado
+python -m ataques.blackbox_attack placa.jpg --classe 14 --passos 6912 --step 0.3  # forca "Pare"
 ```
 
 **Achado relevante pro trabalho**: o ataque funciona (testado: não-direcionado chega a 95%+ de confiança numa classe errada, direcionado chega a 99,96% forçando "Pare"), mas custa muito mais **consultas ao modelo** que teria custado chamadas de gradiente num ataque white-box — no teste, o não-direcionado usou ~4.700 consultas e o direcionado precisou escanear a imagem inteira, ~11.400 consultas, pra convergir bem. Isso é o ponto central de um ataque black-box: ele é viável, mas tem um **custo mensurável e observável** (número de chamadas ao modelo) que não existe no ataque digital white-box nem no ataque físico. Esse número de consultas é justamente o que a mitigação "restringir o número de consultas ao modelo" (ver [mapeamento MITRE ATLAS](#mapeamento-mitre-atlas)) tenta limitar — um sistema que detecta e bloqueia um cliente fazendo milhares de consultas na mesma imagem inviabiliza esse ataque específico, mesmo sem tocar no modelo.
@@ -83,7 +83,7 @@ O [MITRE ATLAS](https://atlas.mitre.org/) é uma base de conhecimento de tática
 | Nossa mitigação/código | Mitigação ATLAS |
 |---|---|
 | `train.py --adv-treino` (adversarial training) | AML.M0003 *Model Hardening* |
-| `--limiar` em `predict.py` (classe "desconhecido") | Aproximação fraca de AML.M0015 *Adversarial Input Detection* — hoje só detecta baixa confiança em geral, não é desenhado especificamente para detectar entrada adversarial (ver "Limitações" abaixo) |
+| `--limiar` em `sinalnet/predict.py` (classe "desconhecido") | Aproximação fraca de AML.M0015 *Adversarial Input Detection* — hoje só detecta baixa confiança em geral, não é desenhado especificamente para detectar entrada adversarial (ver "Limitações" abaixo) |
 | *(não implementado)* rate limiting de consultas | AML.M0004 *Restrict Number of AI Model Queries* — mitigação direta contra o ataque black-box (SimBA), que precisa de milhares de consultas pra convergir |
 
 ### Limitações desse mapeamento
@@ -96,7 +96,7 @@ O [MITRE ATLAS](https://atlas.mitre.org/) é uma base de conhecimento de tática
 `eval_robustez.py` roda FGSM/PGD contra o conjunto de teste inteiro (ou uma amostra, com `--amostra`) e mede a acurácia pra cada valor de eps — diferente dos ataques anteriores, que avaliam uma imagem só. Patch físico e black-box não entram nesse sweep porque otimizam por imagem (caro demais pra rodar nas 12.630 imagens de teste); ficam com os números pontuais já reportados nas seções acima.
 
 ```bash
-python eval_robustez.py --modelo sinalnet.pt sinalnet_robusto.pt --eps 0 0.01 0.02 0.03 0.05 0.08 0.1 --csv robustez.csv
+python -m analise.eval_robustez --modelo sinalnet.pt sinalnet_robusto.pt --eps 0 0.01 0.02 0.03 0.05 0.08 0.1 --csv robustez.csv
 ```
 
 Resultado medido (amostra de 512 imagens, PGD, 5 passos):
@@ -114,7 +114,7 @@ A curva deixa visual o que as seções anteriores só descreviam em texto: o mod
 Uma pergunta que a defesa por adversarial training levanta: será que um exemplo adversarial funciona só contra o modelo em que foi gerado, ou ataca qualquer modelo parecido? `transferencia.py` testa isso: gera adversariais num modelo (PGD, eps=0,03) e mede a acurácia tanto nesse modelo quanto no outro.
 
 ```bash
-python transferencia.py --amostra 2048
+python -m analise.transferencia --amostra 2048
 ```
 
 Resultado medido (2.048 imagens de teste):

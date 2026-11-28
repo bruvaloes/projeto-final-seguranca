@@ -1,6 +1,6 @@
 import torch
 
-from model import CLASSES, NUM_CLASSES, SinalNet
+from sinalnet.model import CLASSES, NUM_CLASSES, SinalNet
 
 
 def test_num_classes_bate_com_a_lista():
