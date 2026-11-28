@@ -1,6 +1,6 @@
 # Análise de segurança
 
-Este documento trata a SinalNet como o alvo de uma análise de risco, não como um projeto de machine learning: o objetivo é entender o que um atacante pode fazer contra o modelo, o quão viável isso é, e o que mitiga cada risco. O código (`attack.py`, `train.py`, `predict.py`) é a ferramenta usada para investigar essas perguntas, não o produto final do trabalho.
+Este documento trata a SinalNet como o alvo de uma análise de risco, não como um projeto de machine learning: o objetivo é entender o que um atacante pode fazer contra o modelo, o quão viável isso é, e o que mitiga cada risco. O código (`ataques/attack.py`, `train.py`, `predict.py`) é a ferramenta usada para investigar essas perguntas, não o produto final do trabalho.
 
 ## Modelo de ameaça e risco
 
@@ -8,7 +8,7 @@ Este documento trata a SinalNet como o alvo de uma análise de risco, não como 
 |---|---|
 | **Ativo** | A decisão de classificação da SinalNet — qual placa o sistema "acha" que está vendo. |
 | **Ameaça** | Um atacante que consegue alterar a imagem de entrada (digitalmente ou perturbando a placa física) para forçar uma classificação diferente da correta. |
-| **Vulnerabilidade** | O modelo é uma rede neural treinada por gradiente: pequenas perturbações alinhadas com o gradiente da perda bastam para mudar a predição, mesmo quando a imagem continua, pra um humano, claramente a mesma placa (`attack.py`, FGSM e PGD). |
+| **Vulnerabilidade** | O modelo é uma rede neural treinada por gradiente: pequenas perturbações alinhadas com o gradiente da perda bastam para mudar a predição, mesmo quando a imagem continua, pra um humano, claramente a mesma placa (`ataques/attack.py`, FGSM e PGD). |
 | **Viabilidade** | Alta no modelo sem defesa: com acesso aos pesos (white-box), PGD já muda a predição com perturbações pequenas (eps ~0,03-0,08 em pixels normalizados entre 0 e 1) em poucas iterações. Discutimos a viabilidade com acesso mais restrito (sem gradiente, sem acesso físico) nas seções seguintes deste documento. |
 | **Impacto** | Depende de onde a decisão é consumida — ver [Cenário de ameaça](#cenário-de-ameaça) abaixo. Em geral, qualquer sistema que decide uma ação de segurança (parar, não ultrapassar, respeitar limite de velocidade) com base nessa classificação propaga o erro adiante. |
 | **Mitigação** | *Adversarial training* (`train.py --adv-treino`) reduz a viabilidade do ataque, ao custo de acurácia limpa — ver a seção "Adversarial training" do [README](README.md). Isso é redução de risco, não eliminação: a Seção de resultados do README mostra que o modelo robusto ainda erra sob ataque, só que menos. |
@@ -27,7 +27,7 @@ Duas superfícies de ataque bem diferentes, com atacantes de capacidade bem dife
 
 **Atacante**: tem acesso ao pipeline de dados entre a câmera e o classificador (ex.: um componente de software comprometido, ou um ataque na própria câmera/driver). Pode alterar os pixels antes de chegarem ao modelo.
 
-**Capacidade**: se também tiver acesso aos pesos do modelo (white-box — o caso mais forte, e o que `attack.py` assume com FGSM/PGD), a perturbação necessária é pequena (eps ~0,03-0,08) e rápida de calcular. Isso é o cenário mais fácil de simular e o que já implementamos.
+**Capacidade**: se também tiver acesso aos pesos do modelo (white-box — o caso mais forte, e o que `ataques/attack.py` assume com FGSM/PGD), a perturbação necessária é pequena (eps ~0,03-0,08) e rápida de calcular. Isso é o cenário mais fácil de simular e o que já implementamos.
 
 **Realismo**: alto *se* o atacante já comprometeu algo no pipeline — mas nesse ponto ele já tem bastante acesso ao sistema, então a classificação de placa pode não ser o elo mais fácil de atacar. Esse ataque é mais relevante como estudo da robustez do modelo em si do que como vetor de intrusão isolado.
 
@@ -45,24 +45,24 @@ A superfície física é a que mais justifica chamar isso de "projeto de seguran
 
 ## Ataque físico (patch adversarial)
 
-`patch_attack.py` implementa a superfície física descrita acima: em vez de perturbar a imagem inteira (FGSM/PGD), otimiza um pequeno adesivo quadrado — um patch — colado num canto fixo da placa, que precisa continuar enganando o modelo mesmo sob variações de ângulo, distância e iluminação da foto.
+`ataques/patch_attack.py` implementa a superfície física descrita acima: em vez de perturbar a imagem inteira (FGSM/PGD), otimiza um pequeno adesivo quadrado — um patch — colado num canto fixo da placa, que precisa continuar enganando o modelo mesmo sob variações de ângulo, distância e iluminação da foto.
 
 ```bash
-python patch_attack.py placa.jpg                                   # nao-direcionado
-python patch_attack.py placa.jpg --classe 14 --tamanho 24 --passos 600  # forca "Pare"
+python ataques/patch_attack.py placa.jpg                                   # nao-direcionado
+python ataques/patch_attack.py placa.jpg --classe 14 --tamanho 24 --passos 600  # forca "Pare"
 ```
 
-A técnica é **Expectation over Transformation** (EoT, de Athalye et al., "Synthesizing Robust Adversarial Examples"): a cada passo do treino do patch, em vez de calcular o gradiente numa única versão da imagem, tiramos a média do gradiente sobre `--amostras-por-passo` versões com rotação, translação, escala e brilho aleatórios (`_compor` em `patch_attack.py`). Isso é o que diferencia esse ataque do FGSM/PGD: o patch não é otimizado pra uma foto específica, é otimizado pra sobreviver a uma distribuição de condições de captura — o requisito real de um adesivo físico.
+A técnica é **Expectation over Transformation** (EoT, de Athalye et al., "Synthesizing Robust Adversarial Examples"): a cada passo do treino do patch, em vez de calcular o gradiente numa única versão da imagem, tiramos a média do gradiente sobre `--amostras-por-passo` versões com rotação, translação, escala e brilho aleatórios (`_compor` em `ataques/patch_attack.py`). Isso é o que diferencia esse ataque do FGSM/PGD: o patch não é otimizado pra uma foto específica, é otimizado pra sobreviver a uma distribuição de condições de captura — o requisito real de um adesivo físico.
 
 **Achado relevante pro trabalho**: o ataque não-direcionado (só forçar qualquer erro) converge rápido e com alta confiança mesmo com uma faixa de EoT pequena. O ataque **direcionado** (forçar uma classe específica, ex. fazer o modelo ver "Pare" em qualquer outra placa) precisa de um patch maior e mais passos para convergir de forma confiável — com `--tamanho 16` e EoT mais larga ele não converge bem; com `--tamanho 24` (um quarto da área da imagem) e 600 passos, chega a 98,6% de confiança na classe forçada. Ou seja: **é consideravelmente mais fácil um atacante causar um erro qualquer do que escolher exatamente qual erro causar** — uma assimetria de risco que vale citar na análise: mesmo um atacante sem controle fino ainda consegue negar o reconhecimento correto da placa.
 
 ## Ataque black-box (baseado em consultas)
 
-Todos os ataques anteriores (FGSM, PGD, o patch) assumem acesso aos pesos do modelo para calcular o gradiente — **white-box**. Um atacante real contra um sistema implantado (por trás de uma API, ou de um binário que ele não conseguiu extrair os pesos) normalmente não tem isso. `blackbox_attack.py` implementa o **SimBA** (Guo et al., "Simple Black-box Adversarial Attacks"): a cada passo, tenta perturbar um pixel aleatório pra cima ou pra baixo e só olha se a probabilidade da classe de interesse melhorou — nunca usa `.backward()` nem acessa gradiente, só consulta a saída do modelo (`model(x)`), que é exatamente o que um atacante com apenas acesso de API conseguiria fazer.
+Todos os ataques anteriores (FGSM, PGD, o patch) assumem acesso aos pesos do modelo para calcular o gradiente — **white-box**. Um atacante real contra um sistema implantado (por trás de uma API, ou de um binário que ele não conseguiu extrair os pesos) normalmente não tem isso. `ataques/blackbox_attack.py` implementa o **SimBA** (Guo et al., "Simple Black-box Adversarial Attacks"): a cada passo, tenta perturbar um pixel aleatório pra cima ou pra baixo e só olha se a probabilidade da classe de interesse melhorou — nunca usa `.backward()` nem acessa gradiente, só consulta a saída do modelo (`model(x)`), que é exatamente o que um atacante com apenas acesso de API conseguiria fazer.
 
 ```bash
-python blackbox_attack.py placa.jpg                                    # nao-direcionado
-python blackbox_attack.py placa.jpg --classe 14 --passos 6912 --step 0.3  # forca "Pare"
+python ataques/blackbox_attack.py placa.jpg                                    # nao-direcionado
+python ataques/blackbox_attack.py placa.jpg --classe 14 --passos 6912 --step 0.3  # forca "Pare"
 ```
 
 **Achado relevante pro trabalho**: o ataque funciona (testado: não-direcionado chega a 95%+ de confiança numa classe errada, direcionado chega a 99,96% forçando "Pare"), mas custa muito mais **consultas ao modelo** que teria custado chamadas de gradiente num ataque white-box — no teste, o não-direcionado usou ~4.700 consultas e o direcionado precisou escanear a imagem inteira, ~11.400 consultas, pra convergir bem. Isso é o ponto central de um ataque black-box: ele é viável, mas tem um **custo mensurável e observável** (número de chamadas ao modelo) que não existe no ataque digital white-box nem no ataque físico. Esse número de consultas é justamente o que a mitigação "restringir o número de consultas ao modelo" (ver [mapeamento MITRE ATLAS](#mapeamento-mitre-atlas)) tenta limitar — um sistema que detecta e bloqueia um cliente fazendo milhares de consultas na mesma imagem inviabiliza esse ataque específico, mesmo sem tocar no modelo.
@@ -75,9 +75,9 @@ O [MITRE ATLAS](https://atlas.mitre.org/) é uma base de conhecimento de tática
 
 | Nosso ataque/código | Tática ATLAS | Técnica ATLAS |
 |---|---|---|
-| `attack.py` (FGSM/PGD) — ataque com acesso aos pesos | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.000 *White-Box Optimization* |
-| `patch_attack.py` (patch físico, EoT) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → AML.T0043.000 *White-Box Optimization* (usa gradiente; a "entrega" do ataque é que é física, não digital) |
-| `blackbox_attack.py` (SimBA) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.001 *Black-Box Optimization* |
+| `ataques/attack.py` (FGSM/PGD) — ataque com acesso aos pesos | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.000 *White-Box Optimization* |
+| `ataques/patch_attack.py` (patch físico, EoT) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → AML.T0043.000 *White-Box Optimization* (usa gradiente; a "entrega" do ataque é que é física, não digital) |
+| `ataques/blackbox_attack.py` (SimBA) | AML.TA0001 *ML Attack Staging* | AML.T0043 *Craft Adversarial Data* → sub-técnica AML.T0043.001 *Black-Box Optimization* |
 | Qualquer um dos ataques acima, do ponto de vista do efeito final (a classificação sair errada) | Tática de impacto/evasão (varia por mapeamento) | AML.T0015 *Evade ML Model* |
 
 | Nossa mitigação/código | Mitigação ATLAS |
@@ -90,3 +90,51 @@ O [MITRE ATLAS](https://atlas.mitre.org/) é uma base de conhecimento de tática
 
 - O `--limiar` de confiança não foi desenhado como defesa contra ataque adversarial — ele resolve um problema diferente (placa fora das 43 classes do GTSRB). Um ataque adversarial bem-sucedido tende a produzir uma predição com confiança *alta* na classe errada (como os testes acima mostram: 95-99% de confiança), então o limiar não pega esses casos. Citar isso como limitação é mais honesto do que reivindicar uma defesa que não existe.
 - Não implementamos AML.M0004 (rate limiting) de fato — é uma mitigação de infraestrutura/API, fora do escopo deste repositório, que só faz sentido quando o modelo está de fato atrás de uma API servindo requisições.
+
+## Curva de robustez (acurácia × força do ataque)
+
+`eval_robustez.py` roda FGSM/PGD contra o conjunto de teste inteiro (ou uma amostra, com `--amostra`) e mede a acurácia pra cada valor de eps — diferente dos ataques anteriores, que avaliam uma imagem só. Patch físico e black-box não entram nesse sweep porque otimizam por imagem (caro demais pra rodar nas 12.630 imagens de teste); ficam com os números pontuais já reportados nas seções acima.
+
+```bash
+python eval_robustez.py --modelo sinalnet.pt sinalnet_robusto.pt --eps 0 0.01 0.02 0.03 0.05 0.08 0.1 --csv robustez.csv
+```
+
+Resultado medido (amostra de 512 imagens, PGD, 5 passos):
+
+| eps | `sinalnet.pt` (normal) | `sinalnet_robusto.pt` (adv. training, 40 épocas) |
+|---|---|---|
+| 0,00 | 97,5% | 77,5% |
+| 0,03 | 14,3% | 56,8% |
+| 0,08 | 10,4% | 45,5% |
+
+A curva deixa visual o que as seções anteriores só descreviam em texto: o modelo normal **colapsa** assim que o ataque aparece (97,5% → 14,3% com eps=0,03, uma queda de 83 pontos), enquanto o robusto perde acurácia de forma muito mais suave (77,5% → 56,8%, queda de 21 pontos) — ao custo de já começar mais baixo mesmo sem ataque.
+
+## Transferência entre os dois modelos
+
+Uma pergunta que a defesa por adversarial training levanta: será que um exemplo adversarial funciona só contra o modelo em que foi gerado, ou ataca qualquer modelo parecido? `transferencia.py` testa isso: gera adversariais num modelo (PGD, eps=0,03) e mede a acurácia tanto nesse modelo quanto no outro.
+
+```bash
+python transferencia.py --amostra 2048
+```
+
+Resultado medido (2.048 imagens de teste):
+
+| Adversarial gerado em → avaliado em | Acurácia |
+|---|---|
+| normal → normal (branco, mesmo modelo) | 11,0% |
+| normal → robusto (transferência) | 72,9% |
+| robusto → robusto (branco, mesmo modelo) | 52,8% |
+| robusto → normal (transferência) | 69,8% |
+
+**Achado**: a transferência é baixa nos dois sentidos — um adversarial feito pro modelo normal mal afeta o robusto (72,9%, quase a acurácia limpa dele) e vice-versa. Isso quer dizer que a robustez de um modelo adversarialmente treinado não é "genérica": ela é relativamente específica ao próprio modelo. Do ponto de vista de ameaça, isso é uma boa notícia (um atacante não consegue treinar um substituto parecido e reusar os adversariais direto num sistema diferente com muita facilidade), mas também significa que validar a robustez de **um** modelo não garante nada sobre outro modelo, mesmo que pareçam similares.
+
+## Tentativa de detecção de entrada adversarial (resultado negativo)
+
+A mitigação AML.M0015 (*Adversarial Input Detection*) sugere detectar entrada adversarial antes mesmo de classificar. Testamos duas heurísticas simples e baratas, implementadas em `deteccao.py`:
+
+1. **Instabilidade sob ruído**: a hipótese era que uma imagem adversarial, por estar bem perto da fronteira de decisão (foi perturbada com a menor distância que bastou pra cruzá-la), teria a predição instável sob um pouco de ruído aleatório, enquanto uma imagem limpa, mais "dentro" da região da sua classe, manteria a predição.
+2. **Margem de confiança** (top-1 menos top-2 probabilidade): a hipótese era que um ataque bem-sucedido deixaria uma margem pequena.
+
+**Nenhuma das duas se sustentou nos testes**: comparando 8 imagens de teste limpas contra as mesmas após PGD (eps=0,03), a taxa de discordância sob ruído não separou os dois grupos de forma confiável (em alguns casos a imagem *limpa* ficou mais instável que a adversarial), e a margem de confiança continuou alta (frequentemente ~1,0) tanto antes quanto depois do ataque — ou seja, o PGD produz erros com *alta* confiança, não baixa. Isso é consistente com a literatura: PGD otimiza explicitamente para cruzar a fronteira de decisão de forma eficiente, então o ponto resultante não fica "ao acaso" perto da fronteira em todas as direções, só na direção específica do gradiente — ruído aleatório (que testa direções genéricas) não necessariamente revela isso.
+
+Mantemos `deteccao.py` no repositório como evidência desse experimento, não como uma defesa que funciona. O achado em si é relevante pro trabalho: reforça por que *model hardening* (adversarial training) é a mitigação mais confiável das que testamos, e por que detecção barata e genérica não é um substituto trivial para ela.

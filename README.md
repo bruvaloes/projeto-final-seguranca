@@ -56,12 +56,12 @@ Esse treino é bem mais lento que o normal (cada batch faz `--adv-passos` rodada
 ## Ataques adversariais
 
 ```bash
-python attack.py placa.jpg --eps 0.05                          # FGSM, nao-direcionado
-python attack.py placa.jpg --metodo pgd --eps 0.05 --passos 10 # PGD, mais forte
-python attack.py placa.jpg --metodo pgd --direcionado --classe 14 --eps 0.08 --passos 20
+python ataques/attack.py placa.jpg --eps 0.05                          # FGSM, nao-direcionado
+python ataques/attack.py placa.jpg --metodo pgd --eps 0.05 --passos 10 # PGD, mais forte
+python ataques/attack.py placa.jpg --metodo pgd --direcionado --classe 14 --eps 0.08 --passos 20
 ```
 
-`attack.py` perturba a imagem para enganar a `SinalNet`, imprimindo a predição antes e depois do ataque e salvando a versão perturbada (`--salvar`). Dois métodos:
+`ataques/attack.py` perturba a imagem para enganar a `SinalNet`, imprimindo a predição antes e depois do ataque e salvando a versão perturbada (`--salvar`). Dois métodos:
 
 - **FGSM** (passo único): rápido, mas perturbação mais fraca.
 - **PGD** (iterativo, `--alpha` e `--passos`): repete o passo do FGSM várias vezes, projetando de volta na bola de raio `--eps` a cada iteração; consideravelmente mais forte.
@@ -114,6 +114,13 @@ Além dessas, `preparar_imagem` transforma a imagem num tensor `[1, 3, 48, 48]`,
 - `train.py`: treino, avaliação e adversarial training
 - `augmentacao.py`: transforms extras de augmentation usados no treino
 - `predict.py`: funções de inferência para imagem e vídeo e a linha de comando
-- `attack.py`: ataques adversariais (FGSM/PGD) contra o modelo
+- `ataques/`: scripts de ataque adversarial contra o modelo
+  - `attack.py`: FGSM e PGD (acesso aos pesos)
+  - `patch_attack.py`: patch físico robusto a ângulo/escala/brilho (EoT)
+  - `blackbox_attack.py`: ataque baseado em consultas, sem gradiente (SimBA)
+- `eval_robustez.py`: curva de acurácia × força do ataque (FGSM/PGD) no conjunto de teste inteiro
+- `transferencia.py`: testa se exemplos adversariais de um modelo enganam o outro
+- `deteccao.py`: tentativa (sem sucesso, documentada) de detectar entrada adversarial
 - `sinalnet.pt`: pesos treinados
 - `tests/`: testes automatizados (pytest) de `model.py` e `predict.py`
+- `SEGURANCA.md`: análise de risco, cenário de ameaça e mapeamento MITRE ATLAS
